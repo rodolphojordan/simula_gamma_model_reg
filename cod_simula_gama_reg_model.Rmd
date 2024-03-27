@@ -1,5 +1,5 @@
 ---
-title: "Simulação de um modelo de regressão gama"
+title: "Simulação de um modelo de regressão gama no R"
 author: "Rodolpho"
 date: "2024-03-15"
 output: html_document
@@ -9,22 +9,231 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## R Markdown
+## Introdução
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+A distribuição gama faz parte de uma ampla classe de modelos utilizados para análise de dados positivos assimétricos. Especificamente, ela tem sido amplamente adotada na análise de tempos de sobrevivência ou duração, especialmente nas esferas médica e de engenharia. No entanto, seu uso se estende para diversas outras áreas do conhecimento, como pesca, meteorologia, finanças, seguros e atuária.
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
 
-```{r cars}
-summary(cars)
+Os modelos de regressão são ferramentas estatísticas fundamentais para entender e quantificar a relação entre variáveis. Eles são amplamente utilizados em diversas áreas, como ciências sociais, biológicas e econômicas, para analisar como uma variável de interesse (a variável resposta) é influenciada por outras variáveis (variáveis explicativas).
+
+A escolha da distribuição gama para modelar a resposta é comum em situações onde os dados possuem características de assimetria positiva e variação heteroscedástica, o que a torna adequada para modelar fenômenos onde a variância aumenta ou diminui conforme a média aumenta. Além disso, a distribuição gama é útil para modelar variáveis contínuas positivas que não são normalmente distribuídas.
+
+No contexto deste estudo, podemos imaginar um cenário em que estamos investigando o tempo de espera de atendimento em um hospital. Nesse caso, a variável resposta seria o tempo de espera, e as variáveis explicativas poderiam incluir características do paciente, como idade, gravidade do caso e horário de chegada.
+
+As simulações no R são essenciais para avaliar o desempenho do modelo de regressão, especialmente quando os dados reais são limitados ou quando queremos entender como o modelo se comporta sob diferentes condições. No R, podemos facilmente simular dados com base no modelo proposto e examinar como os resultados variam em diferentes cenários.
+
+Nos próximos passos, vamos detalhar a formulação do modelo de regressão com resposta gama, discutir técnicas de ajuste de parâmetros, interpretar os resultados obtidos e avaliar a qualidade do modelo por meio de simulações no R.
+
+# Distribuição gama
+
+A variável aleatória $Y$ com distribuição gama, parâmetros de forma $\alpha$ e escala $\sigma$ está definida no R da seguinte forma:
+\begin{equation}
+f(y) =  \dfrac{1}{\sigma^\alpha\Gamma(\alpha)}y^{\alpha-1}\mathrm{e}^{-y/\sigma}, \,\ y \geq 0, \alpha > 0 \,\ \text{e}\,\ \sigma > 0. 
+\end{equation}
+\noindent
+Portanto, $\mathrm{I\!E}(Y) = \mu = \alpha\sigma$ e $\mathrm{Var}(Y) = \alpha\sigma^2$. Notação: $Y \sim \mathcal{G}(\alpha,\sigma)$. Nesse caso, dizemos que $Y$ segue uma distribuição gama de parâmetros de forma $\alpha$ e escala $\sigma$. A seguir, temos a densidade:
+
+```{r echo=F, message=FALSE, warning=FALSE,  warning=FALSE, out.width="80%",fig.cap="Densidades da distribuição gama para alguns valores de forma e escala.", fig.align="center"}
+library(ggplot2)
+library(gridExtra)
+
+# Função para calcular a densidade gama
+dgamma_values <- function(x, scale, shape) {
+  return(dgamma(x, scale = scale, shape = shape))
+}
+
+# Gerar dados para plotagem
+x <- seq(0, 40, length.out = 200)
+
+# Criar dataframe com os valores das densidades
+df <- data.frame(x = rep(x, 4),
+                 y = c(dgamma_values(x, scale = 4, shape = 3),
+                       dgamma_values(x, scale = 3, shape = 2),
+                       dgamma_values(x, scale = 3, shape = 3),
+                       dgamma_values(x, scale = 4, shape = 4)),
+                 group = factor(rep(1:4, each = length(x))))
+
+# Plotar os gráficos usando ggplot2
+p <- ggplot(df, aes(x = x, y = y)) +
+  geom_line() +
+  facet_wrap(~ group, nrow = 2) +
+  labs(y = "Densidade")
+
+# Plotar o gráfico
+print(p)
 ```
 
-## Including Plots
+A seguir, iremos definir um modelo de regressão considerando uma reposta gama e como fazer simulações no R.  
 
-You can also embed plots, for example:
+# Modelo de regressão com resposta gama
 
-```{r pressure, echo=FALSE}
-plot(pressure)
+Vamos supor que $Y_1,\ldots,Y_n$ são variáveis aleatórias independentes tais que $Y_i \sim \mathcal{G}(\alpha_i,\sigma_i)$. Além disso, vamos supor que $g(\mu_i) = \eta_i$, onde a função $g(\cdot)$ é chamada de função de ligação. Aqui, $\eta_i= \boldsymbol{x}_i^\top\boldsymbol{\beta}$, com $\boldsymbol{x}_i= (x_{i1},\ldots,x_{ip})^\top$ contendo valores das variáveis explicativas e $\boldsymbol{\beta}= (\beta_1,\ldots,\beta_p)^\top$, representando o vetor de parâmetros de interesse. Essa formulação nos permite modelar a relação entre as variáveis explicativas e a média da distribuição gama através de uma função sistemática.
+
+As funções de ligação mais comumente usadas no contexto da distribuição gama são a identidade $(\mu_i =\eta_i)$, a função logarítmica $(\log \mu_i = \eta_i)$ e a função recíproca $(\mu_i=\eta_i^{-1})$, sendo esta última conhecida como a ligação canônica. A escolha da função de ligação depende da relação que se espera entre as variáveis explicativas e a variável resposta. Por exemplo, a função identidade é adequada quando se espera uma relação linear direta entre as variáveis, enquanto a função logarítmica é útil quando se espera uma relação log-linear.
+
+Nosso objetivo é simular dados de uma regressão com resposta gama e estimar os parâmetros do modelo. Isso nos permitirá compreender como as variáveis explicativas afetam a média da distribuição gama e como podemos interpretar os coeficientes do modelo em termos práticos. Através da simulação, podemos também avaliar a precisão das estimativas dos parâmetros e a adequação do modelo aos dados observados.
+
+Existem pelo menos duas possibilidades para realizar uma simulação desse tipo:
+
+1. Considerando a variância fixa e variando o parâmetro de dispersão com a média. Neste cenário, mantemos a variância constante enquanto alteramos a média, o que nos permite investigar como a dispersão da distribuição gama afeta a relação entre a média e o parâmetro de dispersão. Isso pode ser particularmente útil para entender como a variabilidade dos dados se comporta em diferentes níveis de média.
+
+2. Considerando a dispersão fixa e variando a variância com a média. Nesta abordagem, fixamos a dispersão e permitimos que a variância varie com a média. Essa reparametrização nos coloca na forma usual dos Modelos Lineares Generalizados (MLGs), facilitando a interpretação dos resultados e comparações com outros modelos. Aqui, a média ainda depende do regressor $x$, e relações entre os outros parâmetros são induzidas. Essa segunda opção é particularmente útil para aqueles que desejam resultados alinhados com a reparametrização padrão dos MLGs.
+
+Em ambos os casos, a média da distribuição gama é modelada como uma função das variáveis explicativas, o que nos permite explorar como diferentes fatores influenciam a variável resposta. A escolha entre essas abordagens dependerá dos objetivos específicos da análise e das preferências em relação à interpretação dos parâmetros do modelo.
+
+# Ajuste de modelo utilizando a função glm
+Considerando o primeiro caso, onde $\alpha = \mu^2/c$ e $\sigma = c/\mu$ para uma constante $c$, observamos que a variância é constante, uma vez que $\mathrm{Var}(Y) = \alpha\sigma^2 = (\mu^2/c)(c/\mu)^2 = c$, enquanto os parâmetros $\alpha$ e $\sigma$ variam com a média, . Para ajustar um modelo de regressão com resposta gama, utilizaremos a ligação log, mas os exemplos podem ser facilmente estendidos para outras ligações. Assumindo $\log(\mu_i) = \eta_i$, então $\mu_i = \exp(\eta_i)$.
+
+Para ilustrar, vamos simular $n$ observações, onde
+
+ 1.  $y_i\mid\boldsymbol{x}_i\overset{\text{ind}}{\sim} \mathcal{G}(\alpha_i, \sigma_i)$;
+ 2. $\log(\mu_i)=\eta_i$, com $\eta_i=\boldsymbol{x}_i^\top\boldsymbol{\beta}$, $i=1,2,\ldots,n$.
+
+Vamos assumir que $\eta_i = 2 + 3x_i$, em que $x_i$ será simulada como uma uniforme no intervalo $(0,1)$. Ou seja, $x_i\sim \mathcal{U}(0,1)$. Aqui está o trecho de código correspondente:
+```{r echo=T, message=FALSE, warning=FALSE,  warning=FALSE}
+n<-50 # tamanho da amostra
+x<-runif(n,0,1)
+# Componente sistemático do modelo
+eta<-2 + 3*x # preditor linear
+mu<-exp(eta) # média da variável resposta supondo ligação log.
+# Parâmetros para a distribuição gama
+
+var<- 2 # suposição de variância constante
+alpha <- mu^2/var
+sigma <- var/mu
+# componente aleatório do modelo
+# Simulação de variáveis gama
+y1 <- rgamma(n, shape = alpha, scale = sigma) 
+#Criando um data frame
+df1<-data.frame(y1,x)
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+Para ajustar o modelo de regressão com resposta gama, utilizamos o seguinte trecho de código:
+
+```{r echo=T, message=FALSE, warning=FALSE,  warning=FALSE}
+#Ajuste do modelo
+mod1<-glm(y1~x,data = df1,Gamma(link = "log"))
+```
+
+Neste código, a fórmula "y1 ~ x" especifica a relação entre a variável resposta (y1) e as variáveis explicativas (x). O argumento "data = df1" indica o dataframe a partir do qual os dados serão retirados para ajustar o modelo. O tipo de resposta é especificado como "Gamma", indicando que estamos ajustando um modelo com distribuição gama. Além disso, especificamos a função de ligação como "log", indicando que estamos usando a ligação logarítmica entre a média e a função sistemática.
+
+Posteriormente, por meio da função "summary()", apresentamos os resultados do ajuste:
+
+```{r echo=T, message=FALSE, warning=FALSE,  warning=FALSE}
+#Resumo do ajuste
+summary(mod1)
+```
+
+Aqui, obtemos uma análise detalhada dos resultados do modelo ajustado, incluindo os coeficientes estimados, seus erros-padrão, valores p, entre outros diagnósticos importantes.
+
+Por fim, podemos observar um bom ajuste dos parâmetros do modelo com base nos resultados apresentados no resumo. Essa avaliação é crucial para determinar a adequação do modelo aos dados observados e para interpretar as relações entre as variáveis no contexto do estudo.
+
+A seguir, apresentamos a segunda parametrização. Nesta reparametrização, assume-se que $\alpha$ é constante e denotamos um novo parâmtros de dispersão $\phi$ (ou parametro de precisão), tal que $\phi = \alpha$. Como $\mu = \alpha\sigma$, então $\mu = \phi\sigma$. Ou seja, $\sigma = \mu/\phi$. Sendo assim, a ajuste do modelo com esta reparamtrização será: \begin{align*}
+f_Y(y) &=\dfrac{\left( \frac{\phi}{\mu}\right)^\phi}{\Gamma(\phi)}y^{\phi-1}\mathrm{e}^{-\frac{\phi}{\mu}y}\\
+\end{align*}
+
+Este modelo é adequado para serem realizadas as simulações de acordo com a parametrização usual dos MGLs. Note que, nesse caso $\mathrm{I\!E}(Y) = \mu$ e $\mathrm{Var}(Y) = \phi(\mu/\phi)^2 = \phi^{-1}\mu^2$. Em outras palavras, $\mathrm{Var}(Y) =\phi^{-1}V(\mu)$, em que $V(\mu) = \mu^2$ é a função de variância do modelo gama. Assim, dizemos que $Y\sim\mathcal{G}(\mu,\phi)$
+
+A seguir, apresentamos o código para a simulação da regressão com resposta gama e parâmetros de precisão $\phi$. Da mesma forma que antes, temos as seguintes premissas:
+
+1. $y_i \mid \boldsymbol{x}_i \overset{\text{ind}}{\sim} \mathcal{G}(\mu_i, \phi)$, onde $y_i$ é a variável resposta para a i-ésima observação, $\boldsymbol{x}_i$ é o vetor de variáveis explicativas, e $\mu_i$ é a média da distribuição gama condicional a $\boldsymbol{x}_i$.
+
+2. $\log(\mu_i)=\eta_i$, com $\eta_i=\boldsymbol{x}_i^\top\boldsymbol{\beta}$, $i=1,2,\ldots,n$. Aqui, assumimos que $\eta_i = 2 + 3x_i$, onde $x_i$ é uma variável aleatória uniforme no intervalo $(0,1)$, ou seja, $x_i \sim \mathcal{U}(0,1)$.
+
+Com base nisso, temos o seguinte trecho de código:
+
+
+```{r echo=T, message=FALSE, warning=FALSE,  warning=FALSE}
+phi<- 10 # parâmtro de precisão
+alpha <- phi
+sigma<-mu/phi
+# componente aleatório do modelo
+y2 <- rgamma(n, shape=alpha, scale=sigma) 
+#Criando um data frame
+df2<-data.frame(y2,x)
+#Ajuste do modelo 2
+mod2<-glm(y2~x,data = df2,Gamma(link = "log"))
+# Resumo do modelo 2
+(b<-summary(mod2))
+```
+Observe que, nesse caso, podemos extrair a estimativa de $\phi$ da seguinte maneira:
+```{r echo=T, message=FALSE, warning=FALSE,  warning=FALSE}
+1/b$dispersion
+```
+
+
+Outra abordagem para modelar a distribuição gama é por meio de uma transformação. Neste caso, consideramos $\alpha = \phi$ e $\sigma = 1$, o que nos leva à seguinte densidade:
+\begin{align*}
+f(x) =  \dfrac{1}{\Gamma(\phi)}x^{\phi-1}\mathrm{e}^{-x}. 
+\end{align*}
+\noindent
+
+Definindo $Y = \frac{\mu}{\phi}X$, onde $\mu$ é a média da distribuição gama original, podemos expressar a função de distribuição acumulada de $Y$ em termos da função de distribuição acumulada de $X$ da seguinte forma:
+
+\begin{align*}
+\mathrm{F}_Y(y) = \mathrm{I\!P}_{Y}(Y\le y) &= \mathrm{I\!P}\left(\dfrac{\mu}{\phi}X\le y\right)\\
+                  &= \mathrm{I\!P}\left(X\le y\dfrac{\phi}{\mu}\right)\\
+                  &=\mathrm{F}_X\left( y\dfrac{\phi}{\mu}\right)
+\end{align*}
+\noindent
+Assim, podemos calcular a densidade de $Y$ como: 
+\begin{align*}
+f_Y(y) = \dfrac{\partial}{\partial y}\mathrm{F}_Y(y) &=\dfrac{\partial}{\partial y}\mathrm{F}_X\left( y\dfrac{\phi}{\mu}\right)\\
+                  &= \dfrac{\phi}{\mu}f_X\left( y\dfrac{\phi}{\mu}\right)\\
+               &= \dfrac{\phi}{\mu}\dfrac{1}{\Gamma(\phi)}\left( y\dfrac{\phi}{\mu}\right)^{\phi-1}\mathrm{e}^{- y\frac{\phi}{\mu}}\\
+&=\dfrac{\left( \frac{\phi}{\mu}\right)^\phi}{\Gamma(\phi)}y^{\phi-1}\mathrm{e}^{-\frac{\phi}{\mu}y}\\
+\end{align*}
+
+Essa transformação nos permite expressar a distribuição de $Y$ em termos da distribuição gama padrão, tornando mais fácil interpretar os parâmetros e comparar os resultados com modelos lineares generalizados (MGLs) convencionais.
+
+Com essa transformação, podemos simular uma regressão com resposta gama da seguinte forma:
+
+```{r echo=T, message=FALSE, warning=FALSE,  warning=FALSE}
+phi<- 10 #parâmtro de precisão 
+# componente aleatório do modelo
+nresp<-rgamma(n,phi)
+y3<-(mu/phi)*nresp # variável resposta
+#Criando um data frame
+df3<-data.frame(y3,x)
+#Ajuste do modelo 2
+mod3<-glm(y3~x,data = df3,Gamma(link = "log"))
+# Resumo do modelo 2
+(b2<-summary(mod3))
+1/b2$dispersion
+```
+
+A previsão dos valores ajustados para três modelos de regressão com resposta gama são plotados junto com os dados originais. Cada modelo (mod1, mod2 e mod3) é ajustado com base nos dados fornecidos e, em seguida, usado para prever os valores ajustados para uma faixa de valores de x. As curvas de ajuste são representadas por linhas tracejadas azuis nos gráficos. Esses gráficos permitem uma avaliação visual da qualidade do ajuste de cada modelo em relação aos dados originais.
+```{r echo=F, message=FALSE, warning=FALSE,  warning=FALSE}
+library(ggplot2)
+library(gridExtra)
+
+# Gerar previsões para novos dados
+new_data <- data.frame(x = seq(0, 1, length.out = 200))
+prdys1 <- predict(mod1, newdata = new_data, type = "response")
+prdys2 <- predict(mod2, newdata = new_data, type = "response")
+prdys3 <- predict(mod3, newdata = new_data, type = "response")
+
+# Criar dataframe para os dados originais
+data_orig <- data.frame(x = x, y1 = y1, y2 = y2, y3 = y3)
+
+# Plotar gráficos usando ggplot2
+p1 <- ggplot(data_orig, aes(x = x, y = y1)) +
+  geom_point() +
+  geom_line(data = data.frame(x = new_data$x, y = prdys1), aes(x = x, y = y), col = "blue", linetype = "dashed", size = 1) +
+  ggtitle("Modelo 1")
+
+p2 <- ggplot(data_orig, aes(x = x, y = y2)) +
+  geom_point() +
+  geom_line(data = data.frame(x = new_data$x, y = prdys2), aes(x = x, y = y), col = "blue", linetype = "dashed", size = 1) +
+  ggtitle("Modelo 2")
+
+p3 <- ggplot(data_orig, aes(x = x, y = y3)) +
+  geom_point() +
+  geom_line(data = data.frame(x = new_data$x, y = prdys3), aes(x = x, y = y), col = "blue", linetype = "dashed", size = 1) +
+  ggtitle("Modelo 3")
+
+# Organizar os gráficos em um único painel
+grid.arrange(p1, p2, p3, nrow = 1)
+```
+
+No próximo artigo, vamos explorar mais a fundo as aplicações do ajuste de modelos de regressão com resposta gama e forneceremos detalhes sobre como realizar o ajuste e interpretação dos resultados usando o software estatístico R.
