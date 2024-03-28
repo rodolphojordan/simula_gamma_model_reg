@@ -1,9 +1,17 @@
 ---
 title: "Simulação de um modelo de regressão gama no R"
-author: "Rodolpho"
-date: "2024-03-15"
-output: html_document
+header-includes:
+author: "Rodolpho J. D. Quintela"
+date: "`r Sys.Date()`"
+output:
+  prettydoc::html_pretty:
+    theme: architect
+    highlight: github
 ---
+<style>
+body {
+text-align: justify}
+</style>
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
@@ -14,13 +22,11 @@ knitr::opts_chunk$set(echo = TRUE)
 A distribuição gama faz parte de uma ampla classe de modelos utilizados para análise de dados positivos assimétricos. Especificamente, ela tem sido amplamente adotada na análise de tempos de sobrevivência ou duração, especialmente nas esferas médica e de engenharia. No entanto, seu uso se estende para diversas outras áreas do conhecimento, como pesca, meteorologia, finanças, seguros e atuária.
 
 
-Os modelos de regressão são ferramentas estatísticas fundamentais para entender e quantificar a relação entre variáveis. Eles são amplamente utilizados em diversas áreas, como ciências sociais, biológicas e econômicas, para analisar como uma variável de interesse (a variável resposta) é influenciada por outras variáveis (variáveis explicativas).
-
 A escolha da distribuição gama para modelar a resposta é comum em situações onde os dados possuem características de assimetria positiva e variação heteroscedástica, o que a torna adequada para modelar fenômenos onde a variância aumenta ou diminui conforme a média aumenta. Além disso, a distribuição gama é útil para modelar variáveis contínuas positivas que não são normalmente distribuídas.
 
 No contexto deste estudo, podemos imaginar um cenário em que estamos investigando o tempo de espera de atendimento em um hospital. Nesse caso, a variável resposta seria o tempo de espera, e as variáveis explicativas poderiam incluir características do paciente, como idade, gravidade do caso e horário de chegada.
 
-As simulações no R são essenciais para avaliar o desempenho do modelo de regressão, especialmente quando os dados reais são limitados ou quando queremos entender como o modelo se comporta sob diferentes condições. No R, podemos facilmente simular dados com base no modelo proposto e examinar como os resultados variam em diferentes cenários.
+As simulações no R são essenciais para avaliar o desempenho do modelo de regressão, especialmente quando os dados reais são limitados ou quando queremos entender como o modelo se comporta sob diferentes condições. No R, podemos facilmente simular dados com base no modelo proposto e examinar como os resultados variam em diferentes cenários. Para além disso, o estudo de simulação desempenha um papel crucial na validação de suposições teóricas subjacentes a alguma pesquisa académica.   
 
 Nos próximos passos, vamos detalhar a formulação do modelo de regressão com resposta gama, discutir técnicas de ajuste de parâmetros, interpretar os resultados obtidos e avaliar a qualidade do modelo por meio de simulações no R.
 
@@ -31,7 +37,7 @@ A variável aleatória $Y$ com distribuição gama, parâmetros de forma $\alpha
 f(y) =  \dfrac{1}{\sigma^\alpha\Gamma(\alpha)}y^{\alpha-1}\mathrm{e}^{-y/\sigma}, \,\ y \geq 0, \alpha > 0 \,\ \text{e}\,\ \sigma > 0. 
 \end{equation}
 \noindent
-Portanto, $\mathrm{I\!E}(Y) = \mu = \alpha\sigma$ e $\mathrm{Var}(Y) = \alpha\sigma^2$. Notação: $Y \sim \mathcal{G}(\alpha,\sigma)$. Nesse caso, dizemos que $Y$ segue uma distribuição gama de parâmetros de forma $\alpha$ e escala $\sigma$. A seguir, temos a densidade:
+Portanto, $\mathrm{I\!E}(Y) = \mu = \alpha\sigma$ e $\mathrm{Var}(Y) = \alpha\sigma^2$. Notação: $Y \sim \mathcal{G}(\alpha,\sigma)$. Nesse caso, dizemos que $Y$ segue uma distribuição gama de parâmetros de forma $\alpha$ e escala $\sigma$. A seguir, temos a densidade para diferentes valores de $\alpha$ e $\sigma$:
 
 ```{r echo=F, message=FALSE, warning=FALSE,  warning=FALSE, out.width="80%",fig.cap="Densidades da distribuição gama para alguns valores de forma e escala.", fig.align="center"}
 library(ggplot2)
@@ -128,7 +134,7 @@ Aqui, obtemos uma análise detalhada dos resultados do modelo ajustado, incluind
 
 Por fim, podemos observar um bom ajuste dos parâmetros do modelo com base nos resultados apresentados no resumo. Essa avaliação é crucial para determinar a adequação do modelo aos dados observados e para interpretar as relações entre as variáveis no contexto do estudo.
 
-A seguir, apresentamos a segunda parametrização. Nesta reparametrização, assume-se que $\alpha$ é constante e denotamos um novo parâmtros de dispersão $\phi$ (ou parametro de precisão), tal que $\phi = \alpha$. Como $\mu = \alpha\sigma$, então $\mu = \phi\sigma$. Ou seja, $\sigma = \mu/\phi$. Sendo assim, a ajuste do modelo com esta reparamtrização será: \begin{align*}
+A seguir, apresentamos a segunda parametrização. Nesta reparametrização, assume-se que $\alpha$ é constante e denotamos um novo parâmtros de dispersão $\phi$ (ou parametro de precisão), tal que $\phi = \alpha$. Como $\mu = \alpha\sigma$, então $\mu = \phi\sigma$. Ou seja, $\sigma = \mu/\phi$. Sendo assim, o ajuste do modelo com esta reparamtrização será: \begin{align*}
 f_Y(y) &=\dfrac{\left( \frac{\phi}{\mu}\right)^\phi}{\Gamma(\phi)}y^{\phi-1}\mathrm{e}^{-\frac{\phi}{\mu}y}\\
 \end{align*}
 
@@ -156,11 +162,10 @@ mod2<-glm(y2~x,data = df2,Gamma(link = "log"))
 # Resumo do modelo 2
 (b<-summary(mod2))
 ```
-Observe que, nesse caso, podemos extrair a estimativa de $\phi$ da seguinte maneira:
-```{r echo=T, message=FALSE, warning=FALSE,  warning=FALSE}
+Observe que, nesse caso, podemos extrair a estimativa de $\phi$ da seguinte maneira:  $\hat{\phi} =$ `1/b$dispersion`. Que, nesse caso, retorna:
+```{r echo=FALSE, message=FALSE, warning=FALSE}
 1/b$dispersion
 ```
-
 
 Outra abordagem para modelar a distribuição gama é por meio de uma transformação. Neste caso, consideramos $\alpha = \phi$ e $\sigma = 1$, o que nos leva à seguinte densidade:
 \begin{align*}
@@ -199,10 +204,9 @@ df3<-data.frame(y3,x)
 mod3<-glm(y3~x,data = df3,Gamma(link = "log"))
 # Resumo do modelo 2
 (b2<-summary(mod3))
-1/b2$dispersion
 ```
 
-A previsão dos valores ajustados para três modelos de regressão com resposta gama são plotados junto com os dados originais. Cada modelo (mod1, mod2 e mod3) é ajustado com base nos dados fornecidos e, em seguida, usado para prever os valores ajustados para uma faixa de valores de x. As curvas de ajuste são representadas por linhas tracejadas azuis nos gráficos. Esses gráficos permitem uma avaliação visual da qualidade do ajuste de cada modelo em relação aos dados originais.
+A previsão dos valores ajustados para os três modelos de regressão com resposta gama são plotados junto com os dados originais. Cada modelo (mod1, mod2 e mod3) é ajustado com base nos dados fornecidos e, em seguida, usado para prever os valores ajustados para uma faixa de valores de x. As curvas de ajuste são representadas por linhas tracejadas azuis nos gráficos. Esses gráficos permitem uma avaliação visual da qualidade do ajuste de cada modelo em relação aos dados originais.
 ```{r echo=F, message=FALSE, warning=FALSE,  warning=FALSE}
 library(ggplot2)
 library(gridExtra)
